@@ -1,0 +1,14 @@
+ObjectType = Image
+NDims = 3
+BinaryData = True
+BinaryDataByteOrderMSB = False
+CompressedData = False
+TransformMatrix = 1  0  0  0  1  0  0  0  1
+CenterOfRotation = 0  0  0
+AnatomicalOrientation = RAI
+Offset = 0  0  0
+ElementSpacing = 0.308       0.154        1.54
+DimSize = 549  778   20
+ElementNumberOfChannels = 1
+ElementType = MET_UCHAR
+ElementDataFile = patient0001_4CH_sequence.raw
