@@ -4,6 +4,7 @@ import SimpleITK as sitk
 import cv2
 
 DATA_PATH = "../MIA23_Project1_data/" #Path to folder with Patient Folders
+TEST_PATH = "../MIA23_Project1_data_test/"
 
 
 def read_patient_info_file(patient_number):
@@ -13,8 +14,11 @@ def read_patient_info_file(patient_number):
     return ""
 
 
-def read_patient_mhd_file(patient_number, file_prefix):
-    file_path = DATA_PATH + f"patient{patient_number:04d}/patient{patient_number:04d}_{file_prefix}.mhd"
+def read_patient_mhd_file(patient_number, file_prefix, test=False):
+    if test:
+        file_path = DATA_PATH + f"patient{patient_number:04d}/patient{patient_number:04d}_{file_prefix}.mhd"
+    else:
+        file_path = TEST_PATH + f"Test{patient_number}/test{patient_number}_{file_prefix}.mhd"
 
     # Read the mhd file
     image = sitk.ReadImage(file_path)
@@ -24,6 +28,11 @@ def read_patient_mhd_file(patient_number, file_prefix):
     
     return array, spacing[1]/spacing[0]
 
+def write_mhd_file(image, patient_number, file_prefix):
+    file_path = TEST_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
+
+    sitk.WriteImage(image, file_path, useCompression=True)
+    
 
 def view_image(image, aspectR, title=None):
     plt.imshow(image, cmap='gray', aspect=aspectR)
@@ -75,24 +84,24 @@ def findLargeComponents(image, constrain):
     for i in range(numRegions):
         if i == 0: #Skip background
             continue
-        if stats[i, cv2.CC_STAT_WIDTH] * stats[i, cv2.CC_STAT_HEIGHT] > 5000 and ((not constrain) or (centroids[i][1] < (image.shape)[0] * 0.55)):
+        if (stats[i, cv2.CC_STAT_WIDTH] * stats[i, cv2.CC_STAT_HEIGHT] > 6000) and ((not constrain) or (centroids[i][1] < (image.shape)[0] * 0.55)):
             components.append([centroids[i][1], i])
     return sorted(components), label #Pick topmost component
     
     
-def findPrimaryComponent(imageFrame):
+def findPrimaryComponent(imageFrame, max_iter):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17))
     
     components = []
     label = None
     iterations = 0
-    while len(components) == 0 and iterations < 5:
+    while len(components) == 0 and iterations < max_iter:
         size = 1 if iterations == 0 else 5*iterations
         closed = cv2.dilate(imageFrame, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size)), iterations=1)
         closed = cv2.erode(closed, kernel, iterations=1)
         closed = cv2.dilate(closed, kernel, iterations=1)
     
-        components, label = findLargeComponents(closed, iterations < 4)
+        components, label = findLargeComponents(closed, iterations < max_iter-1)
         iterations += 1
     
     assert(label is not None)
@@ -136,7 +145,7 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
 
     yConvolved[yConvolved < 100] = 0 #Binarize to 0/1
     yConvolved[yConvolved > 0] = 1
-    yConvolved[int(.75*imageHeight):,:] = 0 #Remove strong edges from the bottom quarter of image
+    yConvolved[int(.75*imageHeight):,:] = 0 #Remove strong edges from the bottom portion of image
     
     numRegions, label, stats, centroids = cv2.connectedComponentsWithStats(yConvolved.astype(np.uint8), 4, cv2.CV_32S)
     components = []
@@ -155,18 +164,19 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
     
     x3, y3 = np.nonzero(yConvolved)
     x3 += 15 # push a little down
-    
+    if (not np.isnan(np.average(x3))):
+        corrected[int(np.average(x3)):, :] = 0 # below horizontal boundary set to 0
     
     septumKernel = np.ones((120, 60), np.int8)
     septumKernel[:,30:] = -1
     convolved = cv2.filter2D(corrected, cv2.CV_32F, septumKernel)
     convolved[cv2.dilate(ultrasoundMask.astype(np.uint8), np.ones((50, 50), np.uint8), iterations=1) == 1] = 0 #Mask out dilated ultrasound part
-    convolved = 255 * convolved / np.max(convolved) #Resacle to max = 255
+    convolved = 255 * convolved / np.max(convolved) #Rescale to max = 255
     
     if display:
         setSubplot(ax[0, 1], convolved, aspectRatio, 'Convolved ' + title)
     
-    convolved[convolved < 150] = 0 #Binarize to 0/1
+    convolved[convolved < 100] = 0 #Binarize to 0/1
     convolved[convolved > 0] = 1
     convolved[:,int(imageWidth*0.55):] = 0 #Remove strong edges from the right of center
     numRegions, label, stats, centroids = cv2.connectedComponentsWithStats(convolved.astype(np.uint8), 4, cv2.CV_32S)
@@ -197,17 +207,18 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
     convRight[convRight > 0] = 1
     convRight[:,:int(imageWidth*0.45)] = 0 #Remove strong edges from the left of center
     
-    numRegions, label, stats, centroids = cv2.connectedComponentsWithStats(convRight.astype(np.uint8), 4, cv2.CV_32S)
-    components = []
-    for i in range(numRegions):
+    numRegions2, label2, stats2, centroids2 = cv2.connectedComponentsWithStats(convRight.astype(np.uint8), 4, cv2.CV_32S)
+    components2 = []
+    for i in range(numRegions2):
         if i == 0: #Skip background
             continue
-        components.append([stats[i, cv2.CC_STAT_WIDTH] * stats[i, cv2.CC_STAT_HEIGHT], i])
-    components = sorted(components)
-    components.reverse() # largest to smallest
+        # if centroids2[i][1] > components[0][1] + 25: # only append component if it's to the right of the septum edge centroid, wouldn't work for some reason
+        components2.append([stats2[i, cv2.CC_STAT_WIDTH] * stats2[i, cv2.CC_STAT_HEIGHT], i])
+    components2 = sorted(components2)
+    components2.reverse() # largest to smallest
 
-    for i in range(1, len(components)): # keep only largest component
-        convRight[label == components[i][1]] = 0
+    for i in range(1, len(components2)): # keep only largest component
+        convRight[label2 == components2[i][1]] = 0
 
     if display:
         setSubplot(ax[3,2], convRight, aspectRatio, 'Right max threshold')
@@ -241,8 +252,9 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
         setSubplot(ax[1, 1], RGB, aspectRatio, 'Thresholded ' + title)
     
 
-    # Masking off sides of boundaries
-    thresholded[int(np.average(x3)):,:] = 0 # below horizontal boundary set to 0
+    # Masking off sides of boundaries and below horizontal boundary
+    if (not np.isnan(np.average(x3))):
+        thresholded[int(np.average(x3)):,:] = 0 # below horizontal boundary set to 0
     if np.average(y) < 0.55*imageWidth: #Only block if in left half of image, the correct septum
         pts = np.array([[0,0],[0, int(-c/m)],[imageHeight, int((imageHeight-c)/m)],[0, imageHeight]], np.int32)
         cv2.fillPoly(thresholded, [pts], (0,0,0))
@@ -257,12 +269,11 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
     
     thresholded = cv2.medianBlur(thresholded, 7)
     
-    closed = findPrimaryComponent(thresholded)
+    closed = findPrimaryComponent(thresholded, 15)
     if display:
         setSubplot(ax[2, 0], closed, aspectRatio, 'Opened ' + title)
     
     grown = cv2.dilate(closed, cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(7, 7)), iterations=1)
-    
     
     black = np.zeros((imageHeight + 400, imageWidth + 400))
     black[200:200+imageHeight, 200:200+imageWidth] = grown
