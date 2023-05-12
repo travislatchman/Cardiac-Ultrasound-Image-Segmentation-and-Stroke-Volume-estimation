@@ -96,23 +96,71 @@ def findPrimaryComponent(imageFrame):
         iterations += 1
     
     assert(label is not None)
-    closed[label != components[0][1]] = 0
+    if(len(components[0]) > 1):
+        closed[label != components[0][1]] = 0
     return closed
     
     
 def segmentImage(image, aspectRatio, title, display, displayFinal):
     imageHeight = (image.shape)[0]
     imageWidth = (image.shape)[1]
+
+
+    # Things to do:
+    """
+    Find right side of ventricle using convolved image
+    Find bottom of ventricle using a horizontal line filter
+    Put lines in those spots and mask outside image
+    Something might be going wrong with findPrimaryComponent or findLargeComponents
+    """
+
+    # gamma correction
+    threshold = otsuValue(image) - 25
+    invGamma = 0.6
+    table = np.array([((i / 255.0) ** invGamma) * 255 if i > threshold else ((i / 255.0) ** (1/invGamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    corrected = cv2.LUT(image, table)
+
     if display:
-        fig, ax = plt.subplots(3, 3, figsize=(22, 16))
+        fig, ax = plt.subplots(4, 3, figsize=(22, 20))
         setSubplot(ax[0, 0], image, aspectRatio, 'Original ' + title)
     
     ultrasoundMask = (image == 0) #Mask outside the ultrasound range
+
+    dyKernel = np.ones((60,30), np.int8)
+    dyKernel[:int(dyKernel.shape[0]/2),:] = -1
+    yConvolved = cv2.filter2D(corrected, cv2.CV_32F, dyKernel)
+    yConvolved[cv2.dilate(ultrasoundMask.astype(np.uint8), np.ones((50, 50), np.uint8), iterations=1) == 1] = 0 #Mask out dilated ultrasound part
+    yConvolved = 255 * yConvolved / np.max(yConvolved) #Rescale to max = 255
+    
+    if display:
+        setSubplot(ax[3, 0], yConvolved, aspectRatio, 'YConvolved ' + title)
+
+    yConvolved[yConvolved < 100] = 0 #Binarize to 0/1
+    yConvolved[yConvolved > 0] = 1
+    yConvolved[int(.75*imageHeight):,:] = 0 #Remove strong edges from the bottom quarter of image
+    
+    numRegions, label, stats, centroids = cv2.connectedComponentsWithStats(yConvolved.astype(np.uint8), 4, cv2.CV_32S)
+    components = []
+    for i in range(numRegions):
+        if i == 0: #Skip background
+            continue
+        components.append([stats[i, cv2.CC_STAT_WIDTH] * stats[i, cv2.CC_STAT_HEIGHT], i])
+    components = sorted(components)
+    components.reverse() # largest to smallest
+
+    for i in range(1, len(components)): # keep only largest component
+        yConvolved[label == components[i][1]] = 0
+
+    if display:
+        setSubplot(ax[3,1], yConvolved, aspectRatio, 'Gradient Y max threshold')
+    
+    x3, y3 = np.nonzero(yConvolved)
+    x3 += 15 # push a little down
     
     
     septumKernel = np.ones((120, 60), np.int8)
     septumKernel[:,30:] = -1
-    convolved = cv2.filter2D(image, cv2.CV_32F, septumKernel)
+    convolved = cv2.filter2D(corrected, cv2.CV_32F, septumKernel)
     convolved[cv2.dilate(ultrasoundMask.astype(np.uint8), np.ones((50, 50), np.uint8), iterations=1) == 1] = 0 #Mask out dilated ultrasound part
     convolved = 255 * convolved / np.max(convolved) #Resacle to max = 255
     
@@ -136,24 +184,48 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
     
     if display:
         setSubplot(ax[0, 2], convolved, aspectRatio, 'Max Threshold ' + title)
+
+
+    # convolve image to find right side of ventricle
+    rightKernel = np.ones((120,30), np.int8)
+    rightKernel[:,:int(rightKernel.shape[1]/2)] = -1
+    
+    convRight = cv2.filter2D(corrected, cv2.CV_32F, rightKernel)
+    convRight[cv2.dilate(ultrasoundMask.astype(np.uint8), np.ones((50, 50), np.uint8), iterations=1) == 1] = 0 
+    convRight = 255 * convRight / np.max(convRight) #Resacle to max = 255
+
+    convRight[convRight < 100] = 0 #Binarize to 0/1
+    convRight[convRight > 0] = 1
+    convRight[:,:int(imageWidth*0.45)] = 0 #Remove strong edges from the left of center
+    
+    numRegions, label, stats, centroids = cv2.connectedComponentsWithStats(convRight.astype(np.uint8), 4, cv2.CV_32S)
+    components = []
+    for i in range(numRegions):
+        if i == 0: #Skip background
+            continue
+        components.append([stats[i, cv2.CC_STAT_WIDTH] * stats[i, cv2.CC_STAT_HEIGHT], i])
+    components = sorted(components)
+    components.reverse() # largest to smallest
+
+    for i in range(1, len(components)): # keep only largest component
+        convRight[label == components[i][1]] = 0
+
+    if display:
+        setSubplot(ax[3,2], convRight, aspectRatio, 'Right max threshold')
+    
+    x2, y2 = np.nonzero(convRight)
+    y2 += 15 # push a little to the right
+    A2 = np.vstack([x2, np.ones(len(x2))]).T
+    m2, c2 = np.linalg.lstsq(A2, y2, rcond=None)[0] # estimate line at right edge
+    m2 += 0.0001
+
     
     x, y = np.nonzero(convolved) #y is actually horizontal here
-    
-    y -= 20 # Fuzzy correction to be on edge
+    y -= 15 # Fuzzy correction to be on edge
     A = np.vstack([x, np.ones(len(x))]).T
-    m, c = np.linalg.lstsq(A, y, rcond=None)[0]
+    m, c = np.linalg.lstsq(A, y, rcond=None)[0] # estimate line at left edge
     m += 0.0001
-    #RGB = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
-    #blurred = cv2.ximgproc.anisotropicDiffusion(RGB, 0.2, 2, 10) 
-    #setSubplot(ax[1, 0], blurred, aspectRatio, 'Anisotropic Diffusion ' + title)
-    #gray = cv2.cvtColor(blurred, cv2.COLOR_RGB2GRAY)
-    #threshold1 = otsuValue(gray)
-    threshold = otsuValue(image) - 25
     
-    invGamma = 0.6
-    #table = np.array([((i / 255.0) ** invGamma) * 255 if i > threshold else i for i in np.arange(0, 256)]).astype("uint8")
-    table = np.array([((i / 255.0) ** invGamma) * 255 if i > threshold else ((i / 255.0) ** (1/invGamma)) * 255 for i in np.arange(0, 256)]).astype("uint8")
-    corrected = cv2.LUT(image, table)
     
     if display:
         setSubplot(ax[1, 0], corrected, aspectRatio, 'Contrasted ' + title)
@@ -161,14 +233,26 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
     
     ret, thresholded = cv2.threshold(corrected, threshold, 255, cv2.THRESH_BINARY_INV)
     thresholded[ultrasoundMask] = 0
+
     RGB = cv2.cvtColor(thresholded, cv2.COLOR_GRAY2RGB)
     cv2.line(RGB, (0, int(-c/m)), (imageHeight, int((imageHeight-c)/m)), (255, 0, 0), 2)
+    cv2.line(RGB, (0, int(-c2/m2)), (imageHeight, int((imageHeight-c2)/m2)), (255, 0, 0),2)
+
     if display:
         setSubplot(ax[1, 1], RGB, aspectRatio, 'Thresholded ' + title)
     
+
+    # Masking off sides of boundaries
+    thresholded[int(np.average(x3)):,:] = 0 # below horizontal boundary set to 0
     if np.average(y) < 0.55*imageWidth: #Only block if in left half of image, the correct septum
         pts = np.array([[0,0],[0, int(-c/m)],[imageHeight, int((imageHeight-c)/m)],[0, imageHeight]], np.int32)
         cv2.fillPoly(thresholded, [pts], (0,0,0))
+    if np.average(y2) > .5 * imageWidth:
+        # pts = np.array([[0, int(-c2/m2)],[imageWidth, 0],[imageWidth, imageHeight],[imageHeight, int((imageHeight-c2)/m2)]], np.int32)
+        # cv2.fillPoly(thresholded, [pts], (0,0,0))
+        thresholded[:, int(np.average(y2)):] = 0
+
+
     if display:
         setSubplot(ax[1, 2], thresholded, aspectRatio, 'Masked ' + title)
     
