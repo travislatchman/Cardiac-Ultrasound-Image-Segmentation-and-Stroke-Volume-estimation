@@ -14,11 +14,14 @@ def read_patient_info_file(patient_number):
     return ""
 
 
-def read_patient_mhd_file(patient_number, file_prefix, test=False):
+def read_patient_mhd_file(patient_number, file_prefix, test=False, results=False):
     if test:
         file_path = DATA_PATH + f"patient{patient_number:04d}/patient{patient_number:04d}_{file_prefix}.mhd"
     else:
         file_path = TEST_PATH + f"Test{patient_number}/test{patient_number}_{file_prefix}.mhd"
+
+    if results:
+        file_path = TEST_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
 
     # Read the mhd file
     image = sitk.ReadImage(file_path)
@@ -26,13 +29,17 @@ def read_patient_mhd_file(patient_number, file_prefix, test=False):
     
     spacing = image.GetSpacing()
     
-    return array, spacing[1]/spacing[0]
+    return array, spacing[1]/spacing[0], spacing
 
-def write_mhd_file(image, patient_number, file_prefix):
+def write_mhd_file(arr, patient_number, file_prefix, spacing):
     file_path = TEST_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
 
-    sitk.WriteImage(image, file_path, useCompression=True)
-    
+    image = sitk.GetImageFromArray(arr)
+    # spacing.reverse()
+    image.SetSpacing(spacing)
+
+    sitk.WriteImage(image, file_path, useCompression=False)
+
 
 def view_image(image, aspectR, title=None):
     plt.imshow(image, cmap='gray', aspect=aspectR)
