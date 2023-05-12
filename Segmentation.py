@@ -96,8 +96,7 @@ def findPrimaryComponent(imageFrame):
         iterations += 1
     
     assert(label is not None)
-    if(len(components[0]) > 1):
-        closed[label != components[0][1]] = 0
+    closed[label != components[0][1]] = 0
     return closed
     
     
