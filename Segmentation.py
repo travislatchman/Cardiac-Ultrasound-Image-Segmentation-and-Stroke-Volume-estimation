@@ -6,7 +6,7 @@ import cv2
 DATA_PATH = "../MIA23_Project1_data/" #Path to folder with Patient Folders
 
 
-def read_patient_info_file(patient_number, file_prefix):
+def read_patient_info_file(patient_number):
     file_path = DATA_PATH + f"patient{patient_number:04d}/Info_2CH.cfg"
     with open(file_path, 'r') as f:
         return f.read()
@@ -217,4 +217,4 @@ def getSequenceSegmentations(patientNumber):
         b, region = segmentImage(image[i], aspect, '4CH_sequence', False, False)
         FourChamber.append(region.astype(np.uint8))
     
-    return TwoChamber, FourChamber 
+    return TwoChamber, FourChamber, aspect
