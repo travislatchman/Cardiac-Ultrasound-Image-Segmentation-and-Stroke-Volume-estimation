@@ -5,6 +5,7 @@ import cv2
 
 DATA_PATH = "../MIA23_Project1_data/" #Path to folder with Patient Folders
 TEST_PATH = "../MIA23_Project1_data_test/"
+RESULT_PATH = "../Team2/"
 
 
 def read_patient_info_file(patient_number):
@@ -21,7 +22,7 @@ def read_patient_mhd_file(patient_number, file_prefix, test=False, results=False
         file_path = TEST_PATH + f"Test{patient_number}/test{patient_number}_{file_prefix}.mhd"
 
     if results:
-        file_path = TEST_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
+        file_path = RESULT_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
 
     # Read the mhd file
     image = sitk.ReadImage(file_path)
@@ -32,7 +33,7 @@ def read_patient_mhd_file(patient_number, file_prefix, test=False, results=False
     return array, spacing[1]/spacing[0], spacing
 
 def write_mhd_file(arr, patient_number, file_prefix, spacing):
-    file_path = TEST_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
+    file_path = RESULT_PATH + f"Test{patient_number}/R_{file_prefix}_sequence.mhd"
 
     image = sitk.GetImageFromArray(arr)
     # spacing.reverse()
@@ -119,15 +120,6 @@ def findPrimaryComponent(imageFrame, max_iter):
 def segmentImage(image, aspectRatio, title, display, displayFinal):
     imageHeight = (image.shape)[0]
     imageWidth = (image.shape)[1]
-
-
-    # Things to do:
-    """
-    Find right side of ventricle using convolved image
-    Find bottom of ventricle using a horizontal line filter
-    Put lines in those spots and mask outside image
-    Something might be going wrong with findPrimaryComponent or findLargeComponents
-    """
 
     # gamma correction
     threshold = otsuValue(image) - 25
@@ -231,7 +223,7 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
         setSubplot(ax[3,2], convRight, aspectRatio, 'Right max threshold')
     
     x2, y2 = np.nonzero(convRight)
-    y2 += 15 # push a little to the right
+    y2 += 1 # push a little to the right
     A2 = np.vstack([x2, np.ones(len(x2))]).T
     m2, c2 = np.linalg.lstsq(A2, y2, rcond=None)[0] # estimate line at right edge
     m2 += 0.0001
