@@ -15,7 +15,7 @@ def read_patient_info_file(patient_number):
 
 
 def read_patient_mhd_file(patient_number, file_prefix, test=False, results=False):
-    if test:
+    if not test:
         file_path = DATA_PATH + f"patient{patient_number:04d}/patient{patient_number:04d}_{file_prefix}.mhd"
     else:
         file_path = TEST_PATH + f"Test{patient_number}/test{patient_number}_{file_prefix}.mhd"
@@ -305,14 +305,14 @@ def segmentImage(image, aspectRatio, title, display, displayFinal):
     return boundary, grown
 
 
-def getSequenceSegmentations(patientNumber): 
-    image, aspect = read_patient_mhd_file(patientNumber, '2CH_sequence')
+def getSequenceSegmentations(patientNumber, test): 
+    image, aspect, spacing = read_patient_mhd_file(patientNumber, '2CH_sequence', test)
     TwoChamber = []
     for i in range(len(image)):
         b, region = segmentImage(image[i], aspect, '2CH_sequence', False, False)
         TwoChamber.append(region.astype(np.uint8))
         
-    image, aspect = read_patient_mhd_file(patientNumber, '4CH_sequence')
+    image, aspect, spacing = read_patient_mhd_file(patientNumber, '4CH_sequence', test)
     FourChamber = []
     for i in range(len(image)):
         b, region = segmentImage(image[i], aspect, '4CH_sequence', False, False)
