@@ -12,8 +12,6 @@ To run the code:
     2. Scroll to the desired task
     3. Run cell
 
-Task A outputs are saved in the same test folder as the sequence images by default
-Task B outputs are saved in the same directory as the script
-Task C outputs are saved in the same place as Task A
+All task outputs will go into their respective result folder in ../Team2/TestX/
 
 Note: ffmpeg is required to generate the video for Task B
