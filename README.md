@@ -28,7 +28,7 @@ Note: ffmpeg is required to generate the video for Task B
 
 ![image](https://github.com/travislatchman/Cardiac-Ultrasound-Image-Segmentation-and-Stroke-Volume-estimation/assets/32372013/33de8994-164d-4f25-aaac-461edeed7148)  
 
-![image](https://github.com/travislatchman/Cardiac-Ultrasound-Image-Segmentation-and-Stroke-Volume-estimation/assets/32372013/ee18393a-51b8-4e0b-9cbc-4b572f54abc1)  
+![image](https://github.com/travislatchman/Cardiac-Ultrasound-Image-Segmentation-and-Stroke-Volume-estimation/assets/32372013/0de325e9-b65e-42e7-99c9-fc8cd6e9ddef)  
 
 ![image](https://github.com/travislatchman/Cardiac-Ultrasound-Image-Segmentation-and-Stroke-Volume-estimation/assets/32372013/a1433ddc-7944-4860-b707-b2e18e2a9c30)  
 
